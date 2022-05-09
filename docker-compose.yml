@@ -2,17 +2,73 @@ version: '3.7'
 
 services:
 
-  front:
-    container_name: front
+  client:
+    container_name: client
     build:
-      context: .
+      context: ./service/mentor-portal-client
       dockerfile: Dockerfile
     hostname: localhost
     ports:
-      - 5000:5000
+      - ${FRONTEND_PORTS}:${FRONTEND_PORTS}
+    environment:
+      - API_BASE_URL
     networks:
       - front-end
 
+  server:
+    container_name: server
+    build:
+      context: ./service/mentor-portal-api
+      dockerfile: Dockerfile
+      args:
+        DEBUG_ARGS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    ports:
+        - ${API_PORTS_ONE}:${API_PORTS_ONE}
+        - ${API_PORTS_TWO}:${API_PORTS_TWO}
+    env_file:
+      - .env
+    environment:
+      - DATABASE_ROOT
+      - EXPOSED_DB_PORT
+      - MYSQL_DATABASE_NAME
+      - MYSQL_DATABASE_USER
+      - MYSQL_DATABASE_PASSWORD
+      - APP_SECRET
+      - TOKEN_EXPIRATION_IN_MINUTES
+    hostname: localhost
+    restart: unless-stopped
+    networks:
+      - mentor-portal-data
+      - front-end
+    depends_on:
+      - database
+
+  database:
+    container_name: database
+    image: 'mysql:${MYSQL_VERSION}'
+    restart: always
+    networks:
+      - mentor-portal-data
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE_NAME}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_DATABASE_PASSWORD}
+    ports:
+      - ${MYSQL_DATABASE_PORTS}
+    expose:
+      # Opens desired port on the container
+      - ${EXPOSED_DB_PORT}
+    volumes:
+      - ./service/mentor-portal-db:/docker-entrypoint-initdb.d
+      - mysql-data:/var/lib/mysql
+    cap_add:
+      - SYS_NICE  # CAP_SYS_NICE
+
+volumes:
+  mysql-data:
+    name: mysql-data
+
 networks:
+  mentor-portal-data:
+    name: mentor-portal-data
   front-end:
     name: front-end
